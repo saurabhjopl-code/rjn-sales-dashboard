@@ -73,10 +73,15 @@
     .upload-area {
       padding: 12px 24px;
       display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .upload-row {
+      display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
-      border-bottom: 1px solid var(--border);
     }
     .upload-area input[type="file"] {
       padding: 6px 8px;
@@ -267,12 +272,27 @@
 </header>
 
 <div class="upload-area">
-  <label for="fileInput"><strong>Upload Orders CSV:</strong></label>
-  <input type="file" id="fileInput" accept=".csv" />
-  <button type="button" id="sampleHintBtn" class="btn">CSV Format Help</button>
-  <button type="button" id="generateBtn" class="btn btn-primary" disabled>Generate Report</button>
-  <button type="button" id="publishBtn" class="btn" disabled>Send to Viewer (Download JSON)</button>
-  <span id="fileStatus" class="upload-status"></span>
+  <div class="upload-row">
+    <label for="fileInput"><strong>Upload Orders CSV:</strong></label>
+    <input type="file" id="fileInput" accept=".csv" />
+    <button type="button" id="sampleHintBtn" class="btn">CSV Format Help</button>
+    <button type="button" id="generateBtn" class="btn btn-primary" disabled>Generate Report</button>
+    <button type="button" id="publishBtn" class="btn" disabled>Send to Viewer</button>
+    <span id="fileStatus" class="upload-status"></span>
+  </div>
+
+  <!-- GitHub token input -->
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;font-size:0.8rem;">
+    <label for="githubTokenInput">GitHub Token (stored only in this browser):</label>
+    <input
+      type="password"
+      id="githubTokenInput"
+      placeholder="Paste github_pat_..."
+      style="padding:4px 8px;border-radius:6px;border:1px solid #374151;background:#020617;color:#e5e7eb;min-width:260px;"
+    />
+    <button type="button" id="saveTokenBtn" class="btn">Save Token</button>
+    <span id="tokenStatus" style="color:#9ca3af;"></span>
+  </div>
 </div>
 
 <div class="filters-bar">
@@ -344,13 +364,27 @@
     <div class="panel">
       <div class="panel-header">
         <div>
+          <div class="panel-title">India Map – Revenue Heatmap (Placeholder)</div>
+          <div class="panel-subtitle">Planned choropleth by Shipping Address State</div>
+        </div>
+      </div>
+      <div id="indiaMapContainer" style="height:260px;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:0.8rem;border:1px dashed #374151;border-radius:10px;">
+        India map visualization placeholder – current logic uses the Revenue by State chart. We can wire a GeoJSON map here next.
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
           <div class="panel-title">Revenue by State</div>
           <div class="panel-subtitle">Shipping Address State</div>
         </div>
       </div>
       <canvas id="stateRevenueChart"></canvas>
     </div>
+  </div>
 
+  <div class="grid grid-2" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
@@ -360,9 +394,7 @@
       </div>
       <canvas id="statusChart"></canvas>
     </div>
-  </div>
 
-  <div class="grid" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
@@ -374,12 +406,56 @@
     </div>
   </div>
 
+  <div class="grid grid-2" style="margin-top:20px;">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Price Range Distribution</div>
+          <div class="panel-subtitle">Which price bands drive most orders</div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="priceRangeTable">
+          <thead>
+          <tr>
+            <th>Price Range (₹)</th>
+            <th>Orders</th>
+            <th>Revenue (₹)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Top 10 Styles (Delivered)</div>
+          <div class="panel-subtitle">By GMV – style code from SKU</div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="topStylesTable">
+          <thead>
+          <tr>
+            <th>Style Code</th>
+            <th>Units Sold</th>
+            <th>GMV (₹)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="grid" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
           <div class="panel-title">Channel & Account Summary</div>
-          <div class="panel-subtitle">Sorted by Revenue (ascending)</div>
+          <div class="panel-subtitle">Sorted by Revenue (highest first)</div>
         </div>
       </div>
       <div class="table-wrapper">
@@ -405,6 +481,13 @@
 </footer>
 
 <script>
+  // ---------- GitHub publish config ----------
+  const GH_OWNER = 'saurabhjopl-code';
+  const GH_REPO = 'rjn-sales-dashboard';
+  const GH_FILE_PATH = 'data/report-data.json';
+  const GH_BRANCH = 'main';
+  const GH_TOKEN_STORAGE_KEY = 'rjn_github_token';
+
   // ---------- CHANNEL → PLATFORM & ACCOUNT MAPPING ----------
   const CHANNEL_MAPPING = {
     "AJIO_NEW":          { channel: "AJIO",        account: "RAJNANDINI" },
@@ -433,6 +516,12 @@
     "SNAPDEAL_WW":       { channel: "SNAPDEAL",   account: "WW" },
     "TATACLIQ":          { channel: "TATACLIQ",   account: "RAJNANDINI" }
   };
+
+  // Sizes from XS to 10XL; anything else → FS (Free Size)
+  const SIZE_CODES = new Set([
+    "XS","S","M","L","XL","XXL",
+    "3XL","4XL","5XL","6XL","7XL","8XL","9XL","10XL"
+  ]);
 
   // Statuses treated as DELIVERED
   const DELIVERED_STATUS_SET = new Set([
@@ -468,8 +557,33 @@
   const totalOrdersEl   = document.getElementById('totalOrders');
   const cancelRateEl    = document.getElementById('cancelRate');
 
+  const githubTokenInput = document.getElementById('githubTokenInput');
+  const saveTokenBtn     = document.getElementById('saveTokenBtn');
+  const tokenStatusEl    = document.getElementById('tokenStatus');
+
   // Date range state
   let dateRange = { start: null, end: null };
+
+  // Init token status
+  (function initTokenStatus() {
+    const token = localStorage.getItem(GH_TOKEN_STORAGE_KEY);
+    if (token) {
+      tokenStatusEl.textContent = 'Token loaded from this browser.';
+    } else {
+      tokenStatusEl.textContent = 'No token saved yet.';
+    }
+  })();
+
+  saveTokenBtn.addEventListener('click', () => {
+    const token = (githubTokenInput.value || '').trim();
+    if (!token) {
+      alert('Please paste your GitHub personal access token.');
+      return;
+    }
+    localStorage.setItem(GH_TOKEN_STORAGE_KEY, token);
+    tokenStatusEl.textContent = 'Token saved in this browser.';
+    githubTokenInput.value = '';
+  });
 
   // Flatpickr init (single input, supports single + range)
   flatpickr(dateRangeInput, {
@@ -546,7 +660,7 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
     publishBtn.disabled = normalizedRows.length === 0;
   });
 
-  publishBtn.addEventListener('click', () => {
+  publishBtn.addEventListener('click', async () => {
     if (!normalizedRows.length) {
       alert('No normalised data available. Generate report first.');
       return;
@@ -555,16 +669,7 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
       generated_at: new Date().toISOString(),
       rows: normalizedRows
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'report-data.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    alert('report-data.json downloaded. Replace /data/report-data.json in your GitHub repo to update the viewer.');
+    await updateReportOnGithub(payload);
   });
 
   channelFilterEl.addEventListener('change', applyFiltersAndRender);
@@ -579,6 +684,27 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
     const month = String(mm).padStart(2, '0');
     const day   = String(dd).padStart(2, '0');
     return `${yyyy}-${month}-${day}`;
+  }
+
+  function parseStyleAndSize(skuRaw) {
+    const sku = (skuRaw || '').trim();
+    if (!sku) {
+      return { style_code: '', size: 'FS' };
+    }
+    const lastDash = sku.lastIndexOf('-');
+    let style_code, sizeRaw;
+    if (lastDash === -1) {
+      style_code = sku;
+      sizeRaw = '';
+    } else {
+      style_code = sku.substring(0, lastDash);
+      sizeRaw = sku.substring(lastDash + 1);
+    }
+    let size = (sizeRaw || '').trim().toUpperCase();
+    if (!SIZE_CODES.has(size)) {
+      size = 'FS'; // Free Size
+    }
+    return { style_code, size };
   }
 
   function normalizeCsvRows(rows) {
@@ -617,11 +743,15 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
         logicalStatus = statusUpper || 'UNKNOWN';
       }
 
+      const { style_code, size } = parseStyleAndSize(sku);
+
       result.push({
         date_iso: dateIso,
         date_label: dateLabel,
         state,
         sku,
+        style_code,
+        size,
         channel_name_raw: channelNameRaw,
         platform,
         account,
@@ -705,6 +835,18 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
     const revenueByDate    = {};
     const summaryByPlatformAccount = {};
 
+    // Price buckets
+    const priceBuckets = {
+      '<500':      { label: '< 500',       orders: 0, revenue: 0 },
+      '500-749':   { label: '500 – 749',   orders: 0, revenue: 0 },
+      '750-999':   { label: '750 – 999',   orders: 0, revenue: 0 },
+      '1000-1499': { label: '1000 – 1499', orders: 0, revenue: 0 },
+      '1500+':     { label: '≥ 1500',      orders: 0, revenue: 0 }
+    };
+
+    // Style stats (DELIVERED only)
+    const styleStats = {}; // style_code → { style_code, units, gmv }
+
     rows.forEach(r => {
       const price = r.price || 0;
       grossRevenue += price;
@@ -732,6 +874,27 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
       summaryByPlatformAccount[key].revenue += price;
       summaryByPlatformAccount[key].units   += 1;
       summaryByPlatformAccount[key].orders  += 1;
+
+      // ----- Price bucket aggregation -----
+      let bucketKey;
+      if (price < 500)            bucketKey = '<500';
+      else if (price < 750)       bucketKey = '500-749';
+      else if (price < 1000)      bucketKey = '750-999';
+      else if (price < 1500)      bucketKey = '1000-1499';
+      else                        bucketKey = '1500+';
+
+      priceBuckets[bucketKey].orders  += 1;
+      priceBuckets[bucketKey].revenue += price;
+
+      // ----- Style stats for DELIVERED -----
+      if (r.status_logical === 'DELIVERED' && r.style_code) {
+        const style = r.style_code;
+        if (!styleStats[style]) {
+          styleStats[style] = { style_code: style, units: 0, gmv: 0 };
+        }
+        styleStats[style].units += 1;
+        styleStats[style].gmv   += price;
+      }
     });
 
     // Summary cards
@@ -747,6 +910,8 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
     buildStatusChart(statusCounts);
     buildDateRevenueChart(revenueByDate);
     buildChannelTable(summaryByPlatformAccount);
+    buildPriceRangeTable(priceBuckets);
+    buildTopStylesTable(styleStats);
   }
 
   function destroyChart(chart) {
@@ -941,7 +1106,7 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
     tbody.innerHTML = '';
 
     const rows = Object.values(summaryByPlatformAccount)
-      .sort((a, b) => a.revenue - b.revenue); // ascending by revenue
+      .sort((a, b) => b.revenue - a.revenue); // DESC by revenue
 
     rows.forEach(r => {
       const tr = document.createElement('tr');
@@ -954,6 +1119,119 @@ DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function buildPriceRangeTable(priceBuckets) {
+    const tbody = document.querySelector('#priceRangeTable tbody');
+    tbody.innerHTML = '';
+
+    const rows = Object.values(priceBuckets)
+      .map(b => ({
+        label: b.label,
+        orders: b.orders,
+        revenue: b.revenue
+      }))
+      .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue);
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.label}</td>
+        <td>${r.orders.toLocaleString('en-IN')}</td>
+        <td>₹${r.revenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function buildTopStylesTable(styleStats) {
+    const tbody = document.querySelector('#topStylesTable tbody');
+    tbody.innerHTML = '';
+
+    const rows = Object.values(styleStats)
+      .sort((a, b) => b.gmv - a.gmv) // top by GMV
+      .slice(0, 10);
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.style_code}</td>
+        <td>${r.units.toLocaleString('en-IN')}</td>
+        <td>₹${r.gmv.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function updateReportOnGithub(payload) {
+    const token = localStorage.getItem(GH_TOKEN_STORAGE_KEY);
+    if (!token) {
+      alert('No GitHub token found. Save your personal access token first.');
+      return;
+    }
+
+    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE_PATH}`;
+
+    const json = JSON.stringify(payload, null, 2);
+    const base64Content = btoa(unescape(encodeURIComponent(json)));
+
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json'
+    };
+
+    // Get current file sha
+    let sha = undefined;
+    try {
+      const resGet = await fetch(url, { headers });
+      if (resGet.ok) {
+        const data = await resGet.json();
+        sha = data.sha;
+      } else if (resGet.status !== 404) {
+        const errText = await resGet.text();
+        console.error('GET error', resGet.status, errText);
+        alert('Error reading existing report-data.json from GitHub.');
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error while reading report-data.json from GitHub.');
+      return;
+    }
+
+    const body = {
+      message: 'Update published report-data.json from admin dashboard',
+      content: base64Content,
+      branch: GH_BRANCH
+    };
+    if (sha) {
+      body.sha = sha;
+    }
+
+    try {
+      const resPut = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!resPut.ok) {
+        const errText = await resPut.text();
+        console.error('PUT error', resPut.status, errText);
+        alert('Failed to publish report to GitHub. Check console for details.');
+        return;
+      }
+
+      const data = await resPut.json();
+      console.log('Publish success:', data);
+      alert('Report published to viewer successfully.\nGitHub Pages will reflect the change shortly.');
+    } catch (err) {
+      console.error(err);
+      alert('Network error while publishing report to GitHub.');
+    }
   }
 </script>
 </body>
