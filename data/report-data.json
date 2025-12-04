@@ -1,0 +1,17 @@
+{
+  "generated_at": "2025-01-01T00:00:00.000Z",
+  "rows": [
+    {
+      "date_iso": "2025-12-01",
+      "date_label": "01-12-2025",
+      "state": "Telangana",
+      "sku": "JOPLLTRW2016-7XL",
+      "channel_name_raw": "MEESHO_SVF",
+      "platform": "MEESHO",
+      "account": "SVF",
+      "price": 460,
+      "status_raw": "CANCELLED",
+      "status_logical": "CANCELLED"
+    }
+  ]
+}
