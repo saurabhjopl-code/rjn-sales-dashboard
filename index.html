@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Rajnandini Sales Dashboard – Viewer (UNIWARE ORDERS ONLY)</title>
+  <title>Rajnandini Sales Dashboard – Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+  <!-- Flatpickr (single + range) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
-    /* same styling as admin, minus upload bar tweaks */
     :root {
       --bg: #0f172a;
       --bg-card: #020617;
@@ -22,6 +24,7 @@
       --accent-dark: #013c47;
     }
     * { box-sizing: border-box; }
+
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
@@ -41,6 +44,7 @@
     header img {
       height: 48px;
       object-fit: contain;
+      background: transparent;
     }
     .header-text {
       display: flex;
@@ -146,6 +150,7 @@
         grid-template-columns: minmax(0,1.1fr) minmax(0,1fr);
       }
     }
+
     .panel {
       background: var(--bg-card);
       border-radius: 14px;
@@ -167,10 +172,12 @@
       font-size: 0.7rem;
       color: var(--text-muted);
     }
+
     canvas {
       width: 100% !important;
       height: 260px !important;
     }
+
     .table-wrapper {
       max-height: 260px;
       overflow: auto;
@@ -217,7 +224,7 @@
   <div class="header-text">
     <div class="header-title">Rajnandini Fashion India Ltd.</div>
     <div class="header-tagline">A Style Of Every Story</div>
-    <div class="header-sub">Multi-Channel Sales Performance Dashboard – Viewer (UNIWARE ORDERS ONLY)</div>
+    <div class="header-sub">Multi-Channel Sales Performance Dashboard – Viewer</div>
   </div>
 </header>
 
@@ -295,13 +302,27 @@
     <div class="panel">
       <div class="panel-header">
         <div>
+          <div class="panel-title">India Map – Revenue Heatmap (Placeholder)</div>
+          <div class="panel-subtitle">Planned choropleth by Shipping Address State</div>
+        </div>
+      </div>
+      <div id="indiaMapContainer" style="height:260px;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:0.8rem;border:1px dashed #374151;border-radius:10px;">
+        India map visualization placeholder – current logic uses the Revenue by State chart. We can wire a GeoJSON map here next.
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
           <div class="panel-title">Revenue by State</div>
           <div class="panel-subtitle">Shipping Address State</div>
         </div>
       </div>
       <canvas id="stateRevenueChart"></canvas>
     </div>
+  </div>
 
+  <div class="grid grid-2" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
@@ -311,9 +332,7 @@
       </div>
       <canvas id="statusChart"></canvas>
     </div>
-  </div>
 
-  <div class="grid" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
@@ -325,12 +344,56 @@
     </div>
   </div>
 
+  <div class="grid grid-2" style="margin-top:20px;">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Price Range Distribution</div>
+          <div class="panel-subtitle">Which price bands drive most orders</div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="priceRangeTable">
+          <thead>
+          <tr>
+            <th>Price Range (₹)</th>
+            <th>Orders</th>
+            <th>Revenue (₹)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Top 10 Styles (Delivered)</div>
+          <div class="panel-subtitle">By GMV – style code from SKU</div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="topStylesTable">
+          <thead>
+          <tr>
+            <th>Style Code</th>
+            <th>Units Sold</th>
+            <th>GMV (₹)</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="grid" style="margin-top:20px;">
     <div class="panel">
       <div class="panel-header">
         <div>
           <div class="panel-title">Channel & Account Summary</div>
-          <div class="panel-subtitle">Sorted by Revenue (ascending)</div>
+          <div class="panel-subtitle">Sorted by Revenue (highest first)</div>
         </div>
       </div>
       <div class="table-wrapper">
@@ -357,7 +420,6 @@
 
 <script>
   let normalizedRows = [];
-  let dateRange = { start: null, end: null };
   let charts = {
     channelRevenueChart: null,
     accountRevenueChart: null,
@@ -378,7 +440,9 @@
   const totalOrdersEl   = document.getElementById('totalOrders');
   const cancelRateEl    = document.getElementById('cancelRate');
 
-  // Flatpickr
+  let dateRange = { start: null, end: null };
+
+  // Flatpickr for viewer
   flatpickr(dateRangeInput, {
     mode: "range",
     dateFormat: "Y-m-d",
@@ -470,6 +534,16 @@
     const revenueByDate    = {};
     const summaryByPlatformAccount = {};
 
+    const priceBuckets = {
+      '<500':      { label: '< 500',       orders: 0, revenue: 0 },
+      '500-749':   { label: '500 – 749',   orders: 0, revenue: 0 },
+      '750-999':   { label: '750 – 999',   orders: 0, revenue: 0 },
+      '1000-1499': { label: '1000 – 1499', orders: 0, revenue: 0 },
+      '1500+':     { label: '≥ 1500',      orders: 0, revenue: 0 }
+    };
+
+    const styleStats = {}; // style_code → { style_code, units, gmv }
+
     rows.forEach(r => {
       const price = r.price || 0;
       grossRevenue += price;
@@ -497,6 +571,25 @@
       summaryByPlatformAccount[key].revenue += price;
       summaryByPlatformAccount[key].units   += 1;
       summaryByPlatformAccount[key].orders  += 1;
+
+      let bucketKey;
+      if (price < 500)            bucketKey = '<500';
+      else if (price < 750)       bucketKey = '500-749';
+      else if (price < 1000)      bucketKey = '750-999';
+      else if (price < 1500)      bucketKey = '1000-1499';
+      else                        bucketKey = '1500+';
+
+      priceBuckets[bucketKey].orders  += 1;
+      priceBuckets[bucketKey].revenue += price;
+
+      if (r.status_logical === 'DELIVERED' && r.style_code) {
+        const style = r.style_code;
+        if (!styleStats[style]) {
+          styleStats[style] = { style_code: style, units: 0, gmv: 0 };
+        }
+        styleStats[style].units += 1;
+        styleStats[style].gmv   += price;
+      }
     });
 
     grossRevenueEl.textContent = '₹' + grossRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -511,6 +604,8 @@
     buildStatusChart(statusCounts);
     buildDateRevenueChart(revenueByDate);
     buildChannelTable(summaryByPlatformAccount);
+    buildPriceRangeTable(priceBuckets);
+    buildTopStylesTable(styleStats);
   }
 
   function destroyChart(chart) {
@@ -693,7 +788,7 @@
     tbody.innerHTML = '';
 
     const rows = Object.values(summaryByPlatformAccount)
-      .sort((a, b) => a.revenue - b.revenue); // ascending
+      .sort((a, b) => b.revenue - a.revenue);
 
     rows.forEach(r => {
       const tr = document.createElement('tr');
@@ -708,7 +803,49 @@
     });
   }
 
-  // -------- Load published report-data.json --------
+  function buildPriceRangeTable(priceBuckets) {
+    const tbody = document.querySelector('#priceRangeTable tbody');
+    tbody.innerHTML = '';
+
+    const rows = Object.values(priceBuckets)
+      .map(b => ({
+        label: b.label,
+        orders: b.orders,
+        revenue: b.revenue
+      }))
+      .sort((a, b) => b.orders - a.orders || b.revenue - a.revenue);
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.label}</td>
+        <td>${r.orders.toLocaleString('en-IN')}</td>
+        <td>₹${r.revenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function buildTopStylesTable(styleStats) {
+    const tbody = document.querySelector('#topStylesTable tbody');
+    tbody.innerHTML = '';
+
+    const rows = Object.values(styleStats)
+      .sort((a, b) => b.gmv - a.gmv)
+      .slice(0, 10);
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.style_code}</td>
+        <td>${r.units.toLocaleString('en-IN')}</td>
+        <td>₹${r.gmv.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---- Load report-data.json published by admin ----
   fetch('data/report-data.json?_=' + Date.now())
     .then(resp => {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -724,17 +861,14 @@
       if (json.generated_at) {
         infoGeneratedEl.textContent = 'Generated at: ' + json.generated_at;
       }
-
       buildFilterOptions(normalizedRows);
       applyFiltersAndRender();
     })
     .catch(err => {
       console.error(err);
-      infoStatusEl.textContent = 'No published report found. Ask admin to upload report-data.json.';
+      infoStatusEl.textContent = 'No published report found or error loading it.';
       infoGeneratedEl.textContent = '';
     });
 </script>
 </body>
 </html>
-
-
