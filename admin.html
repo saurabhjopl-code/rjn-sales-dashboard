@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rajnandini Admin – Sales Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Flatpickr (single + range date picker in one input) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- PapaParse for CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg-card: #020617;
+      --border: #1f2937;
+      --border-soft: #374151;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --accent: #c9a86a; /* gold-ish from logo */
+      --accent-dark: #013c47; /* teal-ish from logo */
+    }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text-main);
+    }
+    header {
+      padding: 16px 24px;
+      background: linear-gradient(90deg, #020617, #111827);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+    }
+    header img {
+      height: 48px;
+      object-fit: contain;
+      background: transparent;
+    }
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .header-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .header-tagline {
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+    .header-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .upload-area {
+      padding: 12px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .upload-area input[type="file"] {
+      padding: 6px 8px;
+      background: #111827;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 0.8rem;
+    }
+    .btn {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: #1f2937;
+      color: var(--text-main);
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover:not(:disabled) {
+      background: #374151;
+    }
+    .btn-primary {
+      background: var(--accent-dark);
+      border-color: var(--accent);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #022c34;
+    }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .upload-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .filters-bar {
+      padding: 10px 24px 14px;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.8rem;
+    }
+    .filter-group label {
+      color: var(--text-muted);
+    }
+    .filter-group input,
+    .filter-group select {
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-card);
+      color: var(--text-main);
+      font-size: 0.8rem;
+    }
+
+    .container {
+      padding: 16px 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: radial-gradient(circle at top left, #1e293b, #020617);
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 25px rgba(15,23,42,0.7);
+    }
+    .card-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .card-value {
+      font-size: 1.3rem;
+      font-weight: 600;
+    }
+    .card-sub {
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr);
+      gap: 20px;
+    }
+    @media (min-width: 1024px) {
+      .grid-2 {
+        grid-template-columns: minmax(0,1.1fr) minmax(0,1fr);
+      }
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 14px 16px 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 30px rgba(15,23,42,0.8);
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .panel-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .panel-subtitle {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 260px !important;
+    }
+
+    .table-wrapper {
+      max-height: 260px;
+      overflow: auto;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    thead {
+      position: sticky;
+      top: 0;
+      background: var(--bg-card);
+      z-index: 1;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #111827;
+      white-space: nowrap;
+    }
+    th {
+      text-align: left;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    tbody tr:nth-child(even) {
+      background: #020617;
+    }
+
+    footer {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-align: right;
+      padding: 8px 24px 12px;
+      border-top: 1px solid #111827;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <img src="assets/logo.png" alt="Rajnandini Logo">
+  <div class="header-text">
+    <div class="header-title">Rajnandini Fashion India Ltd.</div>
+    <div class="header-tagline">A Style Of Every Story</div>
+    <div class="header-sub">Multi-Channel Sales Performance Dashboard – Admin Panel</div>
+  </div>
+</header>
+
+<div class="upload-area">
+  <label for="fileInput"><strong>Upload Orders CSV:</strong></label>
+  <input type="file" id="fileInput" accept=".csv" />
+  <button type="button" id="sampleHintBtn" class="btn">CSV Format Help</button>
+  <button type="button" id="generateBtn" class="btn btn-primary" disabled>Generate Report</button>
+  <button type="button" id="publishBtn" class="btn" disabled>Send to Viewer (Download JSON)</button>
+  <span id="fileStatus" class="upload-status"></span>
+</div>
+
+<div class="filters-bar">
+  <div class="filter-group">
+    <label for="dateRange">Date / Date Range</label>
+    <input type="text" id="dateRange" placeholder="Select date or range" />
+  </div>
+  <div class="filter-group">
+    <label for="channelFilter">Channel (Platform)</label>
+    <select id="channelFilter">
+      <option value="ALL">All Channels</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <label for="accountFilter">Account</label>
+    <select id="accountFilter">
+      <option value="ALL">All Accounts</option>
+    </select>
+  </div>
+</div>
+
+<div class="container">
+  <div class="cards">
+    <div class="card">
+      <div class="card-title">Gross Revenue</div>
+      <div class="card-value" id="grossRevenue">₹0</div>
+      <div class="card-sub">Sum of Selling Price (all orders)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Gross Units</div>
+      <div class="card-value" id="grossUnits">0</div>
+      <div class="card-sub">Count of rows (each row = 1 unit)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Total Orders</div>
+      <div class="card-value" id="totalOrders">0</div>
+      <div class="card-sub">Number of order lines</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cancellation Rate</div>
+      <div class="card-value" id="cancelRate">0%</div>
+      <div class="card-sub">Cancelled / All orders</div>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Revenue by Channel (Platform)</div>
+          <div class="panel-subtitle">Aggregated by marketplace platform</div>
+        </div>
+      </div>
+      <canvas id="channelRevenueChart"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Revenue by Account</div>
+          <div class="panel-subtitle">Mapped from Channel → Account</div>
+        </div>
+      </div>
+      <canvas id="accountRevenueChart"></canvas>
+    </div>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:20px;">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Revenue by State</div>
+          <div class="panel-subtitle">Shipping Address State</div>
+        </div>
+      </div>
+      <canvas id="stateRevenueChart"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Order Status Breakdown</div>
+          <div class="panel-subtitle">Delivered / Cancelled / Returned / Others</div>
+        </div>
+      </div>
+      <canvas id="statusChart"></canvas>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:20px;">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Revenue Trend by Date</div>
+          <div class="panel-subtitle">Based on Order Date</div>
+        </div>
+      </div>
+      <canvas id="dateRevenueChart"></canvas>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:20px;">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Channel & Account Summary</div>
+          <div class="panel-subtitle">Sorted by Revenue (ascending)</div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="channelTable">
+          <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Account</th>
+            <th>Revenue (₹)</th>
+            <th>Units</th>
+            <th>Orders</th>
+          </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  © Rajnandini Fashion India Ltd. | FOR INTERNAL USE ONLY
+</footer>
+
+<script>
+  // ---------- CHANNEL → PLATFORM & ACCOUNT MAPPING ----------
+  const CHANNEL_MAPPING = {
+    "AJIO_NEW":          { channel: "AJIO",        account: "RAJNANDINI" },
+    "AMAZON_FLEX_API":   { channel: "AMAZON",     account: "RAJNANDINI" },
+    "AMAZON_IN_API":     { channel: "AMAZON",     account: "RAJNANDINI" },
+    "FLIPKART":          { channel: "FLIPKART",   account: "RAJNANDINI" },
+    "FLIPKART_ARF":      { channel: "FLIPKART",   account: "ARF" },
+    "FLIPKART_SGA":      { channel: "FLIPKART",   account: "SGB" },
+    "FLIPKART_SVF":      { channel: "FLIPKART",   account: "SVF" },
+    "FLIPKART_VEXIM":    { channel: "FLIPKART",   account: "VIHAAN" },
+    "FLIPKART_WW":       { channel: "FLIPKART",   account: "WW" },
+    "LIMEROAD":          { channel: "LIMEROAD",   account: "RAJNANDINI" },
+    "MEESHO":            { channel: "MEESHO",     account: "RAJNANDINI" },
+    "MEESHO_ARF":        { channel: "MEESHO",     account: "ARF" },
+    "MEESHO_SGA":        { channel: "MEESHO",     account: "SGB" },
+    "MEESHO_SVF":        { channel: "MEESHO",     account: "SVF" },
+    "MEESHO_VEXIM":      { channel: "MEESHO",     account: "VIHAAN" },
+    "MEESHO_WW":         { channel: "MEESHO",     account: "WW" },
+    "Mirraw":            { channel: "MIRRAW",     account: "RAJNANDINI" },
+    "MYNTRAPPMP":        { channel: "MYNTRAPPMP", account: "RAJNANDINI" },
+    "MYNTRAPPMP-VIHAAN": { channel: "MYNTRAPPMP", account: "VIHAAN" },
+    "NYKAA_FASHION_NEW": { channel: "NYKAA",      account: "RAJNANDINI" },
+    "RJN_SHOPIFY":       { channel: "WEBSITE",    account: "RAJNANDINI" },
+    "snap deal":         { channel: "SNAPDEAL",   account: "RAJNANDINI" },
+    "snap deal ":        { channel: "SNAPDEAL",   account: "RAJNANDINI" },
+    "SNAPDEAL_WW":       { channel: "SNAPDEAL",   account: "WW" },
+    "TATACLIQ":          { channel: "TATACLIQ",   account: "RAJNANDINI" }
+  };
+
+  // Statuses treated as DELIVERED
+  const DELIVERED_STATUS_SET = new Set([
+    "DISPATCHED",
+    "DELIVERED",
+    "FULFILLABLE",
+    "CREATED",
+    "PICKING_FOR_INVOICING"
+  ]);
+
+  let rawCsvRows = [];
+  let normalizedRows = [];
+  let charts = {
+    channelRevenueChart: null,
+    accountRevenueChart: null,
+    stateRevenueChart: null,
+    statusChart: null,
+    dateRevenueChart: null
+  };
+
+  const fileInput       = document.getElementById('fileInput');
+  const fileStatus      = document.getElementById('fileStatus');
+  const sampleHintBtn   = document.getElementById('sampleHintBtn');
+  const generateBtn     = document.getElementById('generateBtn');
+  const publishBtn      = document.getElementById('publishBtn');
+
+  const dateRangeInput  = document.getElementById('dateRange');
+  const channelFilterEl = document.getElementById('channelFilter');
+  const accountFilterEl = document.getElementById('accountFilter');
+
+  const grossRevenueEl  = document.getElementById('grossRevenue');
+  const grossUnitsEl    = document.getElementById('grossUnits');
+  const totalOrdersEl   = document.getElementById('totalOrders');
+  const cancelRateEl    = document.getElementById('cancelRate');
+
+  // Date range state
+  let dateRange = { start: null, end: null };
+
+  // Flatpickr init (single input, supports single + range)
+  flatpickr(dateRangeInput, {
+    mode: "range",
+    dateFormat: "Y-m-d",
+    onChange: function(selectedDates) {
+      if (selectedDates.length === 0) {
+        dateRange.start = null;
+        dateRange.end = null;
+      } else if (selectedDates.length === 1) {
+        dateRange.start = selectedDates[0];
+        dateRange.end = null;
+      } else {
+        const [d1, d2] = selectedDates;
+        dateRange.start = d1 < d2 ? d1 : d2;
+        dateRange.end   = d1 < d2 ? d2 : d1;
+      }
+      if (normalizedRows.length) applyFiltersAndRender();
+    }
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    fileStatus.textContent = `Reading: ${file.name} ...`;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        rawCsvRows = results.data || [];
+        fileStatus.textContent = `Loaded ${rawCsvRows.length} rows. Click "Generate Report".`;
+        generateBtn.disabled = rawCsvRows.length === 0;
+        publishBtn.disabled = true;
+      },
+      error: (err) => {
+        console.error(err);
+        fileStatus.textContent = 'Error reading CSV. Check console.';
+        rawCsvRows = [];
+        normalizedRows = [];
+        generateBtn.disabled = true;
+        publishBtn.disabled = true;
+      }
+    });
+  });
+
+  sampleHintBtn.addEventListener('click', () => {
+    alert(
+`Expected minimum columns in CSV:
+
+Shipping Address State
+Item SKU Code
+Channel Name
+Selling Price
+Order Date
+Sale Order Item Status
+
+Date format example: 01-12-2025 (dd-mm-yyyy)
+Selling Price: numeric value (e.g., 460 or 460.50)
+
+Gross Revenue = Sum of Selling Price (all orders)
+Gross Units   = Count of rows (each row = 1 unit)
+
+Delivered statuses:
+DISPATCHED, DELIVERED, FULFILLABLE, CREATED, PICKING_FOR_INVOICING`
+    );
+  });
+
+  generateBtn.addEventListener('click', () => {
+    normalizedRows = normalizeCsvRows(rawCsvRows);
+    fileStatus.textContent = `Normalised ${normalizedRows.length} rows. Adjust filters to slice view.`;
+    buildFilterOptions(normalizedRows);
+    applyFiltersAndRender();
+    publishBtn.disabled = normalizedRows.length === 0;
+  });
+
+  publishBtn.addEventListener('click', () => {
+    if (!normalizedRows.length) {
+      alert('No normalised data available. Generate report first.');
+      return;
+    }
+    const payload = {
+      generated_at: new Date().toISOString(),
+      rows: normalizedRows
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'report-data.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('report-data.json downloaded. Replace /data/report-data.json in your GitHub repo to update the viewer.');
+  });
+
+  channelFilterEl.addEventListener('change', applyFiltersAndRender);
+  accountFilterEl.addEventListener('change', applyFiltersAndRender);
+
+  function parseDateDDMMYYYY(str) {
+    if (!str) return null;
+    const parts = str.trim().split(/[-\/]/);
+    if (parts.length !== 3) return null;
+    const [dd, mm, yyyy] = parts.map(p => parseInt(p, 10));
+    if (!dd || !mm || !yyyy) return null;
+    const month = String(mm).padStart(2, '0');
+    const day   = String(dd).padStart(2, '0');
+    return `${yyyy}-${month}-${day}`;
+  }
+
+  function normalizeCsvRows(rows) {
+    const result = [];
+    rows.forEach(row => {
+      const state = (row['Shipping Address State'] || row['shipping address state'] || '').trim() || 'Unknown';
+      const sku = (row['Item SKU Code'] || row['Item Sku Code'] || row['SKU'] || '').trim();
+      const channelNameRaw = (row['Channel Name'] || row['Channel'] || '').trim();
+      const priceStr = (row['Selling Price'] || row['selling price'] || '0').toString().replace(/,/g, '').trim();
+      const orderDateRaw = (row['Order Date'] || row['order date'] || '').trim();
+      const statusRaw = (row['Sale Order Item Status'] || row['Status'] || '').trim();
+
+      const price = parseFloat(priceStr) || 0;
+      const dateIso = parseDateDDMMYYYY(orderDateRaw);
+      const dateLabel = orderDateRaw || '';
+
+      let platform = 'Unknown';
+      let account  = 'Unknown';
+      const mapping = CHANNEL_MAPPING[channelNameRaw] || CHANNEL_MAPPING[channelNameRaw.trim()];
+      if (mapping) {
+        platform = mapping.channel;
+        account  = mapping.account;
+      } else if (channelNameRaw) {
+        platform = channelNameRaw;
+      }
+
+      const statusUpper = statusRaw.toUpperCase();
+      let logicalStatus;
+      if (DELIVERED_STATUS_SET.has(statusUpper)) {
+        logicalStatus = 'DELIVERED';
+      } else if (statusUpper.includes('CANCEL')) {
+        logicalStatus = 'CANCELLED';
+      } else if (statusUpper.includes('RETURN')) {
+        logicalStatus = 'RETURNED';
+      } else {
+        logicalStatus = statusUpper || 'UNKNOWN';
+      }
+
+      result.push({
+        date_iso: dateIso,
+        date_label: dateLabel,
+        state,
+        sku,
+        channel_name_raw: channelNameRaw,
+        platform,
+        account,
+        price,
+        status_raw: statusRaw,
+        status_logical: logicalStatus
+      });
+    });
+    return result;
+  }
+
+  function buildFilterOptions(rows) {
+    const platforms = new Set();
+    const accounts  = new Set();
+    rows.forEach(r => {
+      if (r.platform) platforms.add(r.platform);
+      if (r.account)  accounts.add(r.account);
+    });
+
+    channelFilterEl.innerHTML = '<option value="ALL">All Channels</option>';
+    Array.from(platforms).sort().forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      channelFilterEl.appendChild(opt);
+    });
+
+    accountFilterEl.innerHTML = '<option value="ALL">All Accounts</option>';
+    Array.from(accounts).sort().forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a;
+      opt.textContent = a;
+      accountFilterEl.appendChild(opt);
+    });
+  }
+
+  function dateToIsoString(d) {
+    if (!d) return null;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function applyFiltersAndRender() {
+    if (!normalizedRows.length) return;
+
+    const selectedPlatform = channelFilterEl.value || 'ALL';
+    const selectedAccount  = accountFilterEl.value || 'ALL';
+
+    const startIso = dateToIsoString(dateRange.start);
+    const endIso   = dateToIsoString(dateRange.end);
+
+    const filtered = normalizedRows.filter(r => {
+      // Date filter
+      if (startIso && !endIso) {
+        if (!r.date_iso || r.date_iso !== startIso) return false;
+      } else if (startIso && endIso) {
+        if (!r.date_iso || r.date_iso < startIso || r.date_iso > endIso) return false;
+      }
+
+      if (selectedPlatform !== 'ALL' && r.platform !== selectedPlatform) return false;
+      if (selectedAccount  !== 'ALL' && r.account  !== selectedAccount)  return false;
+      return true;
+    });
+
+    fileStatus.textContent = `Filtered rows: ${filtered.length}`;
+    processAndRender(filtered);
+  }
+
+  function processAndRender(rows) {
+    let grossRevenue = 0;
+    let grossUnits   = rows.length;
+    let totalOrders  = rows.length;
+    let cancelledCount = 0;
+
+    const revenueByChannel = {};
+    const revenueByAccount = {};
+    const revenueByState   = {};
+    const statusCounts     = {};
+    const revenueByDate    = {};
+    const summaryByPlatformAccount = {};
+
+    rows.forEach(r => {
+      const price = r.price || 0;
+      grossRevenue += price;
+
+      if (r.status_logical === 'CANCELLED') cancelledCount += 1;
+
+      const statusKey = r.status_logical || 'UNKNOWN';
+      statusCounts[statusKey] = (statusCounts[statusKey] || 0) + 1;
+
+      const platform = r.platform || 'Unknown';
+      const account  = r.account  || 'Unknown';
+      const state    = r.state    || 'Unknown';
+
+      revenueByChannel[platform] = (revenueByChannel[platform] || 0) + price;
+      revenueByAccount[account]  = (revenueByAccount[account]  || 0) + price;
+      revenueByState[state]      = (revenueByState[state]      || 0) + price;
+
+      const dateKey = r.date_iso || 'Unknown';
+      revenueByDate[dateKey] = (revenueByDate[dateKey] || 0) + price;
+
+      const key = platform + '||' + account;
+      if (!summaryByPlatformAccount[key]) {
+        summaryByPlatformAccount[key] = { platform, account, revenue: 0, units: 0, orders: 0 };
+      }
+      summaryByPlatformAccount[key].revenue += price;
+      summaryByPlatformAccount[key].units   += 1;
+      summaryByPlatformAccount[key].orders  += 1;
+    });
+
+    // Summary cards
+    grossRevenueEl.textContent = '₹' + grossRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    grossUnitsEl.textContent   = grossUnits.toLocaleString('en-IN');
+    totalOrdersEl.textContent  = totalOrders.toLocaleString('en-IN');
+    const cancelRate = totalOrders ? (cancelledCount / totalOrders) * 100 : 0;
+    cancelRateEl.textContent   = cancelRate.toFixed(1) + '%';
+
+    buildChannelRevenueChart(revenueByChannel);
+    buildAccountRevenueChart(revenueByAccount);
+    buildStateRevenueChart(revenueByState);
+    buildStatusChart(statusCounts);
+    buildDateRevenueChart(revenueByDate);
+    buildChannelTable(summaryByPlatformAccount);
+  }
+
+  function destroyChart(chart) {
+    if (chart) chart.destroy();
+  }
+
+  function buildChannelRevenueChart(revenueByChannel) {
+    const ctx = document.getElementById('channelRevenueChart');
+    destroyChart(charts.channelRevenueChart);
+
+    const labels = Object.keys(revenueByChannel);
+    const data   = labels.map(l => revenueByChannel[l]);
+
+    charts.channelRevenueChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Revenue (₹)', data }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => '₹' + ctx.raw.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } } },
+          y: {
+            ticks: {
+              callback: (val) => '₹' + Number(val).toLocaleString('en-IN')
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function buildAccountRevenueChart(revenueByAccount) {
+    const ctx = document.getElementById('accountRevenueChart');
+    destroyChart(charts.accountRevenueChart);
+
+    const labels = Object.keys(revenueByAccount);
+    const data   = labels.map(l => revenueByAccount[l]);
+
+    charts.accountRevenueChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Revenue (₹)', data }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => '₹' + ctx.raw.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              callback: (val) => '₹' + Number(val).toLocaleString('en-IN')
+            }
+          },
+          y: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  function buildStateRevenueChart(revenueByState) {
+    const ctx = document.getElementById('stateRevenueChart');
+    destroyChart(charts.stateRevenueChart);
+
+    const entries = Object.entries(revenueByState).sort((a, b) => b[1] - a[1]);
+    const labels  = entries.map(e => e[0]);
+    const data    = entries.map(e => e[1]);
+
+    charts.stateRevenueChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Revenue (₹)', data }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => '₹' + ctx.raw.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              callback: (val) => '₹' + Number(val).toLocaleString('en-IN')
+            }
+          },
+          y: { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  function buildStatusChart(statusCounts) {
+    const ctx = document.getElementById('statusChart');
+    destroyChart(charts.statusChart);
+
+    const labels = Object.keys(statusCounts);
+    const data   = labels.map(l => statusCounts[l]);
+
+    charts.statusChart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels,
+        datasets: [{ data }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { font: { size: 10 } }
+          }
+        }
+      }
+    });
+  }
+
+  function buildDateRevenueChart(revenueByDate) {
+    const ctx = document.getElementById('dateRevenueChart');
+    destroyChart(charts.dateRevenueChart);
+
+    const entries = Object.entries(revenueByDate)
+      .filter(([k]) => k && k !== 'Unknown')
+      .sort((a, b) => (a[0] > b[0] ? 1 : -1));
+
+    const labels = entries.map(e => e[0]);
+    const data   = entries.map(e => e[1]);
+
+    charts.dateRevenueChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Revenue (₹)',
+          data,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => '₹' + ctx.raw.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 60, minRotation: 30, font: { size: 9 } }
+          },
+          y: {
+            ticks: {
+              callback: (val) => '₹' + Number(val).toLocaleString('en-IN')
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function buildChannelTable(summaryByPlatformAccount) {
+    const tbody = document.querySelector('#channelTable tbody');
+    tbody.innerHTML = '';
+
+    const rows = Object.values(summaryByPlatformAccount)
+      .sort((a, b) => a.revenue - b.revenue); // ascending by revenue
+
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.platform}</td>
+        <td>${r.account}</td>
+        <td>₹${r.revenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+        <td>${r.units}</td>
+        <td>${r.orders}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+</script>
+</body>
+</html>
